@@ -60,13 +60,24 @@ static const struct gpio_dt_spec init_led =
 static const struct gpio_dt_spec sbus_status_led =
     GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
 const struct pwm_dt_spec error_led = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
-
+/* Enum struct to define the diffrent autonomous modes */ 
+enum auto_state {
+  arm_mode=0,
+  drive_mode=1
+};
 /* msg struct for rx coms */
-struct drive_msg {
+struct auto_msg {
+  uint8_t state;
   struct DiffDriveTwist auto_cmd;
   uint32_t crc;
 };
+/*struct for storing the target values for ik function */ 
+struct target_pos{
+  float x;
+  float y;
+  float z;
 
+};
 /* msg struct for tx coms */
 struct gps_data {
   int64_t latitude;
@@ -82,8 +93,9 @@ struct base_station_msg {
 /* defining sbus message queue*/
 K_MSGQ_DEFINE(sbus_msgq, 25 * sizeof(uint8_t), 10, 1);
 /* defining cobs message queue */
-K_MSGQ_DEFINE(drive_msgq, sizeof(struct drive_msg) + 2, 50, 1);
-
+K_MSGQ_DEFINE(drive_msgq, sizeof(struct auto_msg) + 2, 50, 1);
+/*defining cobs message queu for inverse kinematics */ 
+K_MSGQ_DEFINE(arm_msgq,sizeof(struct auto_msg)+2,50,1);
 /* workq dedicated thread */
 K_THREAD_STACK_DEFINE(stack_area, STACK_SIZE);
 
@@ -105,30 +117,48 @@ struct drive_arg {
   struct DiffDriveConfig drive_config;
   struct DiffDriveTwist cmd;
   struct DiffDriveCtx *drive_init;
-  uint8_t drive_raw_buffer[sizeof(struct drive_msg) + 2];
+  uint8_t drive_raw_buffer[sizeof(struct auto_msg) + 2];
 } drive;
+
 
 /* struct for arm variables */
 struct arm_arg {
   enum StepperDirection dir[5];
   int pos[5];
   struct k_work channel_work_item;
+  struct k_work auto_arm_work_item;
+  uint8_t arm_work_buffer[sizeof(struct auto_msg)+2]
 } arm;
 
-/* struct for communication */
+/*struct for communication */ 
 struct com_rx_arg {
   struct k_work cobs_rx_work_item;
   struct k_work *work_item;
-  void *msg_rx; // void* for dynamic type
+  void *msgq_rx;
   struct k_msgq *msgq_rx;
   int cobs_bytes_read;
   size_t MSG_LEN;
   uint8_t *rx_buf;
-} drive_com = {.work_item = &drive.auto_drive_work_item,
-               .msgq_rx = &drive_msgq,
-               .MSG_LEN = sizeof(struct drive_msg) + 2,
-               .rx_buf = drive.drive_raw_buffer};
+};
+struct com_rx_arg drive_com; //autonomous drive com struct
+struct com_rx_arg arm_com; //autonomous arm com struct 
 
+if(auto_msg.state==drive_mode){
+  drive_com.work_item=&drive.auto_drive_work_item;
+  drive_com.msgq_rx=&drive_msgq;
+  drive_com.MSG_LEN=sizeof(struct drive_msgq)+2;
+  drive_com.rx_buf=drive.drive_raw_buffer;
+};
+if(auto_msg.state==arm_mode){
+  arm_com.work_item=&arm.auto_arm_work_item;
+  arm_com.msgq_rx=&arm_msgq;
+  arm_com.MSG_LEN=sizeof(struct arm_msgq)+2;
+  arm_com.rx_buf=arm.arm_work_buffer;
+};
+if(auto_msg.state != arm_mode && auto_msg.state !=drive_mode){
+  printk("Error no state passed with autonomous message");
+  return 0;
+};
 struct com_tx_arg {
   struct k_work sbc_tx_work_item;
   struct base_station_msg bs_msg_tx; // to store encoded base station mssg
@@ -395,6 +425,9 @@ void arm_channel_work_handler(struct k_work *work_ptr) {
     k_sem_give(&ch_sem);
   }
   k_mutex_unlock(&ch_reader_cnt_mutex);
+}
+void auto_arm_work_handler(struct k_work *auto_arm_work_ptr) {
+  stru
 }
 
 /* timer to write to stepper motors*/
