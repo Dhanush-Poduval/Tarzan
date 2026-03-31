@@ -69,6 +69,7 @@ enum auto_state {
 struct auto_msg {
   uint8_t state;
   struct DiffDriveTwist auto_cmd;
+  struct ArmAngles arm_cmd[5]; 
   uint32_t crc;
 };
 /*struct for storing the target values for ik function */ 
@@ -134,7 +135,7 @@ struct arm_arg {
 struct com_rx_arg {
   struct k_work cobs_rx_work_item;
   struct k_work *work_item;
-  void *msgq_rx;
+  void *msg_rx;
   struct k_msgq *msgq_rx;
   int cobs_bytes_read;
   size_t MSG_LEN;
@@ -143,18 +144,18 @@ struct com_rx_arg {
 struct com_rx_arg drive_com; //autonomous drive com struct
 struct com_rx_arg arm_com; //autonomous arm com struct 
 
-if(auto_msg.state==drive_mode){
-  drive_com.work_item=&drive.auto_drive_work_item;
-  drive_com.msgq_rx=&drive_msgq;
-  drive_com.MSG_LEN=sizeof(struct drive_msgq)+2;
-  drive_com.rx_buf=drive.drive_raw_buffer;
-};
-if(auto_msg.state==arm_mode){
-  arm_com.work_item=&arm.auto_arm_work_item;
-  arm_com.msgq_rx=&arm_msgq;
-  arm_com.MSG_LEN=sizeof(struct arm_msgq)+2;
-  arm_com.rx_buf=arm.arm_work_buffer;
-};
+/*drive com item */ 
+drive_com.work_item=&drive.auto_drive_work_item;
+drive_com.msgq_rx=&drive_msgq;
+drive_com.MSG_LEN=sizeof(struct drive_msgq)+2;
+drive_com.rx_buf=drive.drive_raw_buffer;
+
+/* arm com item */ 
+arm_com.work_item=&arm.auto_arm_work_item;
+arm_com.msgq_rx=&arm_msgq;
+arm_com.MSG_LEN=sizeof(struct arm_msgq)+2;
+arm_com.rx_buf=arm.arm_work_buffer;
+
 if(auto_msg.state != arm_mode && auto_msg.state !=drive_mode){
   printk("Error no state passed with autonomous message");
   return 0;
@@ -274,18 +275,23 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
   struct com_rx_arg *com_info = CONTAINER_OF(
       cobs_rx_work_ptr, struct com_rx_arg,
       cobs_rx_work_item); // changed type here to check for conflicts
-                          //
+
   uint8_t buf[com_info->MSG_LEN];
 
   k_msgq_get(com_info->msgq_rx, buf, K_MSEC(4));
-
+  struct auto_msg autonomous_state; 
   cobs_decode_result result = cobs_decode(
-      (com_info->msg_rx), sizeof(com_info->msg_rx), buf, com_info->MSG_LEN - 1);
+      &(autonomous_state), sizeof(autonomous_state), buf, com_info->MSG_LEN - 1);
   if (result.status != COBS_DECODE_OK) {
     LOG_ERR("COBS Decode Failed %d\n", result.status);
     return;
   }
-  // submit autonomous drive handler
+  if(autonomous_state.state==arm_mode){
+      com_info->work_item=arm_com.work_item;
+  }else if(autonomous_state.state==drive_mode){
+      com_info->work_item=drive_com.work_item;
+  }
+  // submit autonomous work handler
   k_work_submit_to_queue(&work_q, com_info->work_item);
 }
 
@@ -427,7 +433,23 @@ void arm_channel_work_handler(struct k_work *work_ptr) {
   k_mutex_unlock(&ch_reader_cnt_mutex);
 }
 void auto_arm_work_handler(struct k_work *auto_arm_work_ptr) {
-  stru
+  struct arm_arg *arm_info= CONTAINER_OF(auto_arm_work_ptr,struct arm_arg ,auto_arm_work_item);
+  struct arm_msg *msg=(struct arm_msg *)arm_info->arm_work_buffer;
+  if (check_crc(arm_info->arm_work_buffer, sizeof(struct arm_msg )) !=msg->crc)
+      return;
+  /* msg should be having x,y,z of target pos or the angles of ik ik function will be inserted */  
+  for(int i=0;i<5;i++){
+    int target=angle_to_steps(msg->joint_angle[i]);
+    int error=target-arm.pos[i];
+    if(error>1){
+     arm_info->dir[i]=HIGH_PULSE; 
+    }else if(error<-1){
+      arm_info->dir[i]=LOW_PULSE;
+    }else {
+      arm_info->dir[i]=STOP_PULSE;
+    }
+  }
+  
 }
 
 /* timer to write to stepper motors*/
