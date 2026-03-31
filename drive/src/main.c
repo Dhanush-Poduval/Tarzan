@@ -141,6 +141,10 @@ struct com_rx_arg {
   size_t MSG_LEN;
   uint8_t *rx_buf;
 };
+
+struct com_rx_arg drive_com; //auto drive struct 
+struct com_rx_arg arm_com; //auto arm struct
+
 struct com_tx_arg {
   struct k_work sbc_tx_work_item;
   struct base_station_msg bs_msg_tx; // to store encoded base station mssg
@@ -448,8 +452,6 @@ K_TIMER_DEFINE(stepper_timer, stepper_timer_handler, NULL);
 int main() {
 
   LOG_INF("Tarzan version %s\nFile: %s\n", TARZAN_GIT_VERSION, __FILE__);
-  struct com_rx_arg drive_com;
-  struct com_rx_arg arm_com;
   /*drive com item */ 
   drive_com.work_item=&drive.auto_drive_work_item;  
   drive_com.msgq_rx=&drive_msgq;

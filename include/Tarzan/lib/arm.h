@@ -22,6 +22,11 @@ enum StepperDirection {
 
 extern struct quaternion q_est;
 
+/* struct to store the angles for each joint (ik) */ 
+struct ArmAngles {
+  float angle;
+};
+
 /* store imu related data */
 struct joint {
   float accel[3];
