@@ -128,7 +128,7 @@ struct arm_arg {
   int pos[5];
   struct k_work channel_work_item;
   struct k_work auto_arm_work_item;
-  uint8_t arm_work_buffer[sizeof(struct auto_msg)+2]
+  uint8_t arm_work_buffer[sizeof(struct auto_msg)+2];
 } arm;
 
 /*struct for communication */ 
@@ -140,25 +140,6 @@ struct com_rx_arg {
   int cobs_bytes_read;
   size_t MSG_LEN;
   uint8_t *rx_buf;
-};
-struct com_rx_arg drive_com; //autonomous drive com struct
-struct com_rx_arg arm_com; //autonomous arm com struct 
-
-/*drive com item */ 
-drive_com.work_item=&drive.auto_drive_work_item;
-drive_com.msgq_rx=&drive_msgq;
-drive_com.MSG_LEN=sizeof(struct drive_msgq)+2;
-drive_com.rx_buf=drive.drive_raw_buffer;
-
-/* arm com item */ 
-arm_com.work_item=&arm.auto_arm_work_item;
-arm_com.msgq_rx=&arm_msgq;
-arm_com.MSG_LEN=sizeof(struct arm_msgq)+2;
-arm_com.rx_buf=arm.arm_work_buffer;
-
-if(auto_msg.state != arm_mode && auto_msg.state !=drive_mode){
-  printk("Error no state passed with autonomous message");
-  return 0;
 };
 struct com_tx_arg {
   struct k_work sbc_tx_work_item;
@@ -290,6 +271,9 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
       com_info->work_item=arm_com.work_item;
   }else if(autonomous_state.state==drive_mode){
       com_info->work_item=drive_com.work_item;
+  }else {
+    printk("Error no valid state found for autonomous \n");
+    return;
   }
   // submit autonomous work handler
   k_work_submit_to_queue(&work_q, com_info->work_item);
@@ -388,10 +372,10 @@ void auto_drive_work_handler(struct k_work *auto_drive_work_ptr) {
   struct drive_arg *drive_info =
       CONTAINER_OF(auto_drive_work_ptr, struct drive_arg, auto_drive_work_item);
 
-  struct drive_msg *msg = (struct drive_msg *)drive_info->drive_raw_buffer;
+  struct auto_msg *msg = (struct auto_msg *)drive_info->drive_raw_buffer;
 
   // check crc
-  if (check_crc(drive_info->drive_raw_buffer, sizeof(struct drive_msg)) !=
+  if (check_crc(drive_info->drive_raw_buffer, sizeof(struct auto_msg)) !=
       msg->crc)
     return;
 
@@ -434,12 +418,12 @@ void arm_channel_work_handler(struct k_work *work_ptr) {
 }
 void auto_arm_work_handler(struct k_work *auto_arm_work_ptr) {
   struct arm_arg *arm_info= CONTAINER_OF(auto_arm_work_ptr,struct arm_arg ,auto_arm_work_item);
-  struct arm_msg *msg=(struct arm_msg *)arm_info->arm_work_buffer;
-  if (check_crc(arm_info->arm_work_buffer, sizeof(struct arm_msg )) !=msg->crc)
+  struct auto_msg *msg=(struct auto_msg *)arm_info->arm_work_buffer;
+  if (check_crc(arm_info->arm_work_buffer, sizeof(struct auto_msg )) !=msg->crc)
       return;
-  /* msg should be having x,y,z of target pos or the angles of ik ik function will be inserted */  
+  /* msg should be having x,y,z of target pos or the angles of ik */   
   for(int i=0;i<5;i++){
-    int target=angle_to_steps(msg->joint_angle[i]);
+    int target=angle_to_steps(msg->arm_cmd[i]);
     int error=target-arm.pos[i];
     if(error>1){
      arm_info->dir[i]=HIGH_PULSE; 
@@ -464,6 +448,19 @@ K_TIMER_DEFINE(stepper_timer, stepper_timer_handler, NULL);
 int main() {
 
   LOG_INF("Tarzan version %s\nFile: %s\n", TARZAN_GIT_VERSION, __FILE__);
+  struct com_rx_arg drive_com;
+  struct com_rx_arg arm_com;
+  /*drive com item */ 
+  drive_com.work_item=&drive.auto_drive_work_item;  
+  drive_com.msgq_rx=&drive_msgq;
+  drive_com.MSG_LEN=sizeof(struct drive_msgq)+2;
+  drive_com.rx_buf=drive.drive_raw_buffer;
+
+  /* arm com item */ 
+  arm_com.work_item=&arm.auto_arm_work_item;
+  arm_com.msgq_rx=&arm_msgq;
+  arm_com.MSG_LEN=sizeof(struct arm_msgq)+2;
+  arm_com.rx_buf=arm.arm_work_buffer;
 
   int err;
 
