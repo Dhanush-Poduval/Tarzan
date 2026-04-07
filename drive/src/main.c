@@ -272,8 +272,10 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
     return;
   }
   if(autonomous_state.state==arm_mode){
+      memcpy(arm.arm_work_buffer,buf,sizeof(buf));
       com_info->work_item=arm_com.work_item;
   }else if(autonomous_state.state==drive_mode){
+      memcpy(drive.drive_raw_buffer,buf,sizeof(buf));
       com_info->work_item=drive_com.work_item;
   }else {
     printk("Error no valid state found for autonomous \n");
