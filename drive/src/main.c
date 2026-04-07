@@ -426,6 +426,7 @@ void auto_arm_work_handler(struct k_work *auto_arm_work_ptr) {
   if (check_crc(arm_info->arm_work_buffer, sizeof(struct auto_msg )) !=msg->crc)
       return;
   /* msg should be having x,y,z of target pos or the angles of ik */   
+  
   for(int i=0;i<5;i++){
     int target=angle_to_steps(msg->arm_cmd[i]);
     int error=target-arm.pos[i];
@@ -437,6 +438,7 @@ void auto_arm_work_handler(struct k_work *auto_arm_work_ptr) {
       arm_info->dir[i]=STOP_PULSE;
     }
   }
+
   
 }
 
@@ -481,6 +483,7 @@ int main() {
   k_work_init(&(drive.drive_work_item), drive_work_handler);
   k_work_init(&(drive.auto_drive_work_item), auto_drive_work_handler);
   k_work_init(&(arm.channel_work_item), arm_channel_work_handler);
+  k_work_init(&(arm.auto_arm_work_item),auto_arm_work_handler);
   k_work_init(&(drive_com.cobs_rx_work_item), cobs_rx_work_handler);
   k_work_init(&(com_tx.sbc_tx_work_item), sbc_tx_work_handler);
 

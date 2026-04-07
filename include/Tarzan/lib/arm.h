@@ -49,8 +49,7 @@ int calibrate_gyro(const struct device *dev, struct joint *data);
 int madgwick_filter(const struct device *const mag_dev,
                     const struct device *const imu_dev, struct joint *data);
 
-int calibrate_magnetometer(const struct device *dev, struct joint *data);
-
+int calibrate_magnetometer(const struct device *dev, struct joint *data); 
 enum StepperDirection update_proportional(float target_angle,
                                           float current_angel);
 #endif
