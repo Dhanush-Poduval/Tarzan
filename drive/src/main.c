@@ -455,13 +455,13 @@ int main() {
   /*drive com item */ 
   drive_com.work_item=&drive.auto_drive_work_item;  
   drive_com.msgq_rx=&drive_msgq;
-  drive_com.MSG_LEN=sizeof(struct drive_msgq)+2;
+  drive_com.MSG_LEN=sizeof(struct auto_msg)+2;
   drive_com.rx_buf=drive.drive_raw_buffer;
 
   /* arm com item */ 
   arm_com.work_item=&arm.auto_arm_work_item;
   arm_com.msgq_rx=&arm_msgq;
-  arm_com.MSG_LEN=sizeof(struct arm_msgq)+2;
+  arm_com.MSG_LEN=sizeof(struct auto_msg)+2;
   arm_com.rx_buf=arm.arm_work_buffer;
 
   int err;
