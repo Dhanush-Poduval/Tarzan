@@ -69,7 +69,7 @@ enum auto_state {
 struct auto_msg {
   uint8_t state;
   struct DiffDriveTwist auto_cmd;
-  struct ArmAngles arm_cmd[5]; 
+  struct joint arm_cmd[6]; 
   uint32_t crc;
 };
 /*struct for storing the target values for ik function */ 
@@ -192,7 +192,6 @@ void sbus_cb(const struct device *dev, void *user_data) {
     sbus_bytes_read = 0;
   }
 }
-
 /* interrupt to store gps data */
 void gps_cb(const struct device *dev, const struct gnss_data *data) {
   if (data->info.fix_status != GNSS_FIX_STATUS_NO_FIX) {
@@ -274,14 +273,18 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
     return;
   }
   if(autonomous_state.state==arm_mode){
+    /* 
     for(int i=0;i<auto_msg+2;i++){
         drive.arm_work_buffer[i]=buffer[i];
-    };
+    }; 
+    */ 
     com_info->work_item=arm_com.work_item;
   }else if(autonomous_state.state==drive_mode){
+    /*
     for(int i=0;i<auto_msg+2;i++){
       drive.drive_raw_buffer=buffer[i];
-    };
+    }; */ 
+     
     com_info->work_item=drive_com.work_item;
   }else {
     printk("Error no valid state found for autonomous \n");
@@ -491,7 +494,7 @@ int main() {
   k_work_init(&(drive.drive_work_item), drive_work_handler);
   k_work_init(&(drive.auto_drive_work_item), auto_drive_work_handler);
   k_work_init(&(arm.channel_work_item), arm_channel_work_handler);
-  k_work_init(&(arm.auto_arm_work_item),auto_arm_work_handler);
+  k_work_init(&(drive.auto_arm_work_item),auto_arm_work_handler);
   k_work_init(&(drive_com.cobs_rx_work_item), cobs_rx_work_handler);
   k_work_init(&(com_tx.sbc_tx_work_item), sbc_tx_work_handler);
 
