@@ -118,6 +118,8 @@ struct drive_arg {
   struct DiffDriveConfig drive_config;
   struct DiffDriveTwist cmd;
   struct DiffDriveCtx *drive_init;
+  struct k_work auto_arm_work_item;
+  uint8_t arm_work_buffer[sizeof(struct auto_msg)+2];
   uint8_t drive_raw_buffer[sizeof(struct auto_msg) + 2];
 } drive;
 
@@ -272,11 +274,15 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
     return;
   }
   if(autonomous_state.state==arm_mode){
-      memcpy(arm.arm_work_buffer,buf,sizeof(buf));
-      com_info->work_item=arm_com.work_item;
+    for(int i=0;i<auto_msg+2;i++){
+        drive.arm_work_buffer[i]=buffer[i];
+    };
+    com_info->work_item=arm_com.work_item;
   }else if(autonomous_state.state==drive_mode){
-      memcpy(drive.drive_raw_buffer,buf,sizeof(buf));
-      com_info->work_item=drive_com.work_item;
+    for(int i=0;i<auto_msg+2;i++){
+      drive.drive_raw_buffer=buffer[i];
+    };
+    com_info->work_item=drive_com.work_item;
   }else {
     printk("Error no valid state found for autonomous \n");
     return;
