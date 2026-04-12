@@ -88,6 +88,7 @@ struct gps_data {
 };
 struct base_station_msg {
   struct gps_data data;
+  struct joint angles[6];
   uint32_t crc;
 };
 
@@ -95,7 +96,7 @@ struct base_station_msg {
 K_MSGQ_DEFINE(sbus_msgq, 25 * sizeof(uint8_t), 10, 1);
 /* defining cobs message queue */
 K_MSGQ_DEFINE(drive_msgq, sizeof(struct auto_msg) + 2, 50, 1);
-/*defining cobs message queu for inverse kinematics */ 
+/*defining cobs message queue for inverse kinematics */ 
 K_MSGQ_DEFINE(arm_msgq,sizeof(struct auto_msg)+2,50,1);
 /* workq dedicated thread */
 K_THREAD_STACK_DEFINE(stack_area, STACK_SIZE);
@@ -203,7 +204,14 @@ void gps_cb(const struct device *dev, const struct gnss_data *data) {
   } else
     LOG_ERR("GPS: Unable to fix satellite");
 }
-
+/* interrupt to send the current joint angles of the arm */ 
+void angles_cb(const struct device *dev , struct joint angles){
+  for(int i=0;i<6;i++){
+    com_tx.bs_msg_tx.angles[i]=angles[i];
+    k_mutex_lock(&)
+    k_work_submit_to_queue(&work_q,&(com_tx.sbc_tx_work_item));
+  };
+};
 /* interrup to read cobs messages */
 void cobs_cb(const struct device *dev, void *user_data) {
   struct com_rx_arg *com_ctx = (struct com_rx_arg *)user_data;
@@ -279,7 +287,7 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
     }; 
     */ 
     com_info->work_item=arm_com.work_item;
-  }else if(autonomous_state.state==drive_mode){
+  }else if(autonomous_state.state==drive_mode){ 
     /*
     for(int i=0;i<auto_msg+2;i++){
       drive.drive_raw_buffer=buffer[i];
