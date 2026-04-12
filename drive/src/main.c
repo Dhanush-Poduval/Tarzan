@@ -98,6 +98,8 @@ K_MSGQ_DEFINE(sbus_msgq, 25 * sizeof(uint8_t), 10, 1);
 K_MSGQ_DEFINE(drive_msgq, sizeof(struct auto_msg) + 2, 50, 1);
 /*defining cobs message queue for inverse kinematics */ 
 K_MSGQ_DEFINE(arm_msgq,sizeof(struct auto_msg)+2,50,1);
+/*defining the message queue for tx item */ 
+K_MSGQ_DEFINE(base_station_msgq,sizeof(struct base_station_msg),10,1);
 /* workq dedicated thread */
 K_THREAD_STACK_DEFINE(stack_area, STACK_SIZE);
 
@@ -201,6 +203,7 @@ void gps_cb(const struct device *dev, const struct gnss_data *data) {
     com_tx.bs_msg_tx.data.altitude = data->nav_data.altitude;
     com_tx.bs_msg_tx.data.bearing = data->nav_data.bearing;
     k_work_submit_to_queue(&work_q, &(com_tx.sbc_tx_work_item));
+    k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
   } else
     LOG_ERR("GPS: Unable to fix satellite");
 }
@@ -208,8 +211,7 @@ void gps_cb(const struct device *dev, const struct gnss_data *data) {
 void angles_cb(const struct device *dev , struct joint angles){
   for(int i=0;i<6;i++){
     com_tx.bs_msg_tx.angles[i]=angles[i];
-    k_mutex_lock(&)
-    k_work_submit_to_queue(&work_q,&(com_tx.sbc_tx_work_item));
+    k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
   };
 };
 /* interrup to read cobs messages */
