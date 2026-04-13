@@ -96,9 +96,9 @@ struct base_station_msg {
 K_MSGQ_DEFINE(sbus_msgq, 25 * sizeof(uint8_t), 10, 1);
 /* defining cobs message queue */
 K_MSGQ_DEFINE(drive_msgq, sizeof(struct auto_msg) + 2, 50, 1);
-/*defining cobs message queue for inverse kinematics */ 
+/* defining cobs message queue for inverse kinematics */ 
 K_MSGQ_DEFINE(arm_msgq,sizeof(struct auto_msg)+2,50,1);
-/*defining the message queue for tx item */ 
+/* defining the message queue for tx item */ 
 K_MSGQ_DEFINE(base_station_msgq,sizeof(struct base_station_msg),10,1);
 /* workq dedicated thread */
 K_THREAD_STACK_DEFINE(stack_area, STACK_SIZE);
@@ -109,6 +109,10 @@ struct k_sem ch_sem;
 struct k_mutex ch_reader_cnt_mutex;
 /* mutex for channel readers to wait for writer */
 struct k_mutex ch_writer_mutex;
+/* mutex for reading message queue values */ 
+struct k_mutex bs_reader_cnt;
+/* mutex for readers to wait for writer */ 
+struct k_mutex bs_writer_cnt;
 /* msgq to store sbus data */
 struct k_work_q work_q;
 /* sbus work item */
@@ -195,15 +199,31 @@ void sbus_cb(const struct device *dev, void *user_data) {
     sbus_bytes_read = 0;
   }
 }
+struct gps_data {
+  int64_t latitude;
+  int64_t longitude;
+  int32_t altitude;
+  int32_t bearing;
+  strct k_work gps_work_item;
+};
+
 /* interrupt to store gps data */
+struct gps_data1 dummy_gps;
 void gps_cb(const struct device *dev, const struct gnss_data *data) {
   if (data->info.fix_status != GNSS_FIX_STATUS_NO_FIX) {
+    /*
     com_tx.bs_msg_tx.data.latitude = data->nav_data.latitude;
     com_tx.bs_msg_tx.data.longitude = data->nav_data.longitude;
     com_tx.bs_msg_tx.data.altitude = data->nav_data.altitude;
     com_tx.bs_msg_tx.data.bearing = data->nav_data.bearing;
-    k_work_submit_to_queue(&work_q, &(com_tx.sbc_tx_work_item));
-    k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
+    */ 
+    dummy_gps.latitude=data->nav_data.latitude;
+    dummy_gps.longitude=data->nav_data.longitude;
+    dummy_gps.altitude=data->nav_data.altitude;
+    dummy_gps.bearing=data->nav_data.bearing;
+    //k_work_submit_to_queue(&work_q, &(com_tx.sbc_tx_work_item));
+    k_msgq_put(&base_station_msgq,&dummy_gps,K_NO_WAIT);
+    k_work_submit_to_queue(&work_q,&(dummy_gps.gps_work_item));
   } else
     LOG_ERR("GPS: Unable to fix satellite");
 }
@@ -211,8 +231,16 @@ void gps_cb(const struct device *dev, const struct gnss_data *data) {
 void angles_cb(const struct device *dev , struct joint angles){
   for(int i=0;i<6;i++){
     com_tx.bs_msg_tx.angles[i]=angles[i];
-    k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
+    //k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
   };
+};
+/*gps work handler */ 
+void gps_work_handler(const work_item *gps_work_item){
+  uint8_t buffer[25]={0};
+  int err;
+  k_mutex_lock(&bs_reader_cnt,K_FOREVER);
+  k_msgq_get(&base_station_msgq,&buffer,K_NO_WAIT);
+  
 };
 /* interrup to read cobs messages */
 void cobs_cb(const struct device *dev, void *user_data) {
