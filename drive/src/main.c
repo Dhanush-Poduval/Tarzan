@@ -228,19 +228,47 @@ void gps_cb(const struct device *dev, const struct gnss_data *data) {
     LOG_ERR("GPS: Unable to fix satellite");
 }
 /* interrupt to send the current joint angles of the arm */ 
+struct joint1 {
+  float accel[3];
+  float gyro[3];
+  float mag[3];
+  float pitch;
+  float roll;
+  float yaw;
+  struct k_work arm_tx_work_item;
+};
+struct joint1 arm_tx[6];
 void angles_cb(const struct device *dev , struct joint angles){
   for(int i=0;i<6;i++){
-    com_tx.bs_msg_tx.angles[i]=angles[i];
+      arm_tx[i]=angles[i];
     //k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
   };
+  k_msgq_put(&base_station_msgq,&arm_tx,K_NO_WAIT);
+  k_work_submit_to_queue(&work_q,&(arm_tx.arm_tx_work_item));
 };
-/*gps work handler */ 
+/* gps work handler */ 
 void gps_work_handler(const work_item *gps_work_item){
-  uint8_t buffer[25]={0};
+  struct gps_data buffer={0};
   int err;
   k_mutex_lock(&bs_reader_cnt,K_FOREVER);
   k_msgq_get(&base_station_msgq,&buffer,K_NO_WAIT);
-  
+  com_tx.bs_msg_tx.data.latitude=buffer.latitude;
+  com_tx.bs_msg_tx.data.longitude=buffer.longitude;
+  com_ctx.bs_msg_tx.data.altitude=buffer.altitude;
+  com_ctx.bs_msg_tx.data.bearing=buffer.bearing;
+  k_mutex_unlock(&bs_reader_cnt,K_FOREVER);
+  k_work_submit_to_queue(&work_q,&(com_ctx.sbc_tx_work_item));
+};
+/* work handler for the arms tx message */ 
+void arm_tx_work_handler(const work_item *arm_tx_work_item){
+  struct joint latest_angles[6];
+  k_mutex_lock(&bs_reader_cnt,K_FOREVER);
+  k_msgq_get(&base_station_msgq,&latest_angles,K_NO_WAIT);
+  for(int i=0;i<6;i++){
+    com_tx.bs_msg_tx.angles[i]=latest_angles[i];
+  };
+  k_mutex_unlock(&bs_reader_cnt);
+  k_work_submit_to_queue(&work_q,&(com_tx.sbc_tx_work_item));
 };
 /* interrup to read cobs messages */
 void cobs_cb(const struct device *dev, void *user_data) {
