@@ -98,8 +98,10 @@ K_MSGQ_DEFINE(sbus_msgq, 25 * sizeof(uint8_t), 10, 1);
 K_MSGQ_DEFINE(drive_msgq, sizeof(struct auto_msg) + 2, 50, 1);
 /* defining cobs message queue for inverse kinematics */ 
 K_MSGQ_DEFINE(arm_msgq,sizeof(struct auto_msg)+2,50,1);
-/* defining the message queue for tx item */ 
-K_MSGQ_DEFINE(base_station_msgq,sizeof(struct base_station_msg),10,1);
+/* defining the message queue for tx item arm */ 
+K_MSGQ_DEFINE(arm_tx_msgq,sizeof(struct joint),50,1);
+/* defining the message queue for tx item gps */ 
+K_MSGQ_DEFINE(gps_tx_msgq,sizeof(struct gps_data),50,1);
 /* workq dedicated thread */
 K_THREAD_STACK_DEFINE(stack_area, STACK_SIZE);
 
@@ -117,7 +119,8 @@ struct k_mutex bs_writer_cnt;
 struct k_work_q work_q;
 /* sbus work item */
 struct k_work sbus_work_item;
-
+/*gps work item */ 
+struct k_work gps_work_item; 
 /* struct for drive variables */
 struct drive_arg {
   struct k_work drive_work_item;      // drive work item
@@ -137,6 +140,7 @@ struct arm_arg {
   int pos[5];
   struct k_work channel_work_item;
   struct k_work auto_arm_work_item;
+  struct k_work arm_tx_work_item;
   uint8_t arm_work_buffer[sizeof(struct auto_msg)+2];
 } arm;
 
@@ -173,7 +177,7 @@ const float wheel_velocity_range[] = {-10.0, 10.0};
 const uint16_t channel_range[] = {172, 1811};
 
 /* check if received cobs message is valid,
- * ret 0 if successfull */
+* ret 0 if successfull */
 uint32_t check_crc(uint8_t *msg, size_t MSG_LEN) {
   uint32_t valid_crc;
   valid_crc = crc32_ieee((uint8_t *)msg, MSG_LEN - sizeof(uint32_t));
@@ -199,17 +203,9 @@ void sbus_cb(const struct device *dev, void *user_data) {
     sbus_bytes_read = 0;
   }
 }
-struct gps_data {
-  int64_t latitude;
-  int64_t longitude;
-  int32_t altitude;
-  int32_t bearing;
-  strct k_work gps_work_item;
-};
-
 /* interrupt to store gps data */
-struct gps_data1 dummy_gps;
 void gps_cb(const struct device *dev, const struct gnss_data *data) {
+  struct gps_data1 dummy_gps; 
   if (data->info.fix_status != GNSS_FIX_STATUS_NO_FIX) {
     /*
     com_tx.bs_msg_tx.data.latitude = data->nav_data.latitude;
@@ -222,12 +218,13 @@ void gps_cb(const struct device *dev, const struct gnss_data *data) {
     dummy_gps.altitude=data->nav_data.altitude;
     dummy_gps.bearing=data->nav_data.bearing;
     //k_work_submit_to_queue(&work_q, &(com_tx.sbc_tx_work_item));
-    k_msgq_put(&base_station_msgq,&dummy_gps,K_NO_WAIT);
+    k_msgq_put(&gps_tx_msgq,&dummy_gps,K_NO_WAIT);
     k_work_submit_to_queue(&work_q,&(dummy_gps.gps_work_item));
   } else
     LOG_ERR("GPS: Unable to fix satellite");
 }
 /* interrupt to send the current joint angles of the arm */ 
+/*
 struct joint1 {
   float accel[3];
   float gyro[3];
@@ -235,40 +232,54 @@ struct joint1 {
   float pitch;
   float roll;
   float yaw;
-  struct k_work arm_tx_work_item;
 };
-struct joint1 arm_tx[6];
+*/ 
 void angles_cb(const struct device *dev , struct joint angles){
+  struct arm_arg arm_tx[6];
+  if (!uart_irq_update(sbus_uart))
+    return;
+  if (!uart_irq_rx_ready(sbus_uart))
+    return;
   for(int i=0;i<6;i++){
       arm_tx[i]=angles[i];
     //k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
   };
-  k_msgq_put(&base_station_msgq,&arm_tx,K_NO_WAIT);
+  k_msgq_put(&arm_tx_msgq,&arm_tx,K_NO_WAIT);
   k_work_submit_to_queue(&work_q,&(arm_tx.arm_tx_work_item));
 };
 /* gps work handler */ 
 void gps_work_handler(const work_item *gps_work_item){
   struct gps_data buffer={0};
   int err;
+  if(k_mutex_lock(&bs_writer_cnt)==0 || k_mutex_lock(&bs_reader_cnt)==0){
+    return;
+  }
   k_mutex_lock(&bs_reader_cnt,K_FOREVER);
+  k_mutex_lock(&bs_writer_cnt,K_FOREVER);
   k_msgq_get(&base_station_msgq,&buffer,K_NO_WAIT);
   com_tx.bs_msg_tx.data.latitude=buffer.latitude;
   com_tx.bs_msg_tx.data.longitude=buffer.longitude;
-  com_ctx.bs_msg_tx.data.altitude=buffer.altitude;
-  com_ctx.bs_msg_tx.data.bearing=buffer.bearing;
-  k_mutex_unlock(&bs_reader_cnt,K_FOREVER);
+  com_tx.bs_msg_tx.data.altitude=buffer.altitude;
+  com_tx.bs_msg_tx.data.bearing=buffer.bearing;
   k_work_submit_to_queue(&work_q,&(com_ctx.sbc_tx_work_item));
+  k_mutex_unlock(&bs_writer_cnt,K_FOREVER);
+  k_mutex_unlock(&bs_reader_cnt,K_FOREVER);
 };
 /* work handler for the arms tx message */ 
 void arm_tx_work_handler(const work_item *arm_tx_work_item){
-  struct joint latest_angles[6];
+  struct joint latest_angles[6]={0};
+  if(k_mutex_lock(&bs_writer_cnt)==0 || k_mutex_loc(&bs_reader_cnt)==0){
+    return;
+  }
   k_mutex_lock(&bs_reader_cnt,K_FOREVER);
+  k_mutex_lock(&bs_writer_cnt,K_FOREVER);
   k_msgq_get(&base_station_msgq,&latest_angles,K_NO_WAIT);
   for(int i=0;i<6;i++){
     com_tx.bs_msg_tx.angles[i]=latest_angles[i];
   };
-  k_mutex_unlock(&bs_reader_cnt);
   k_work_submit_to_queue(&work_q,&(com_tx.sbc_tx_work_item));
+  k_mutx_unlock(&bs_writer_cnt);
+  k_mutex_unlock(&bs_reader_cnt);
 };
 /* interrup to read cobs messages */
 void cobs_cb(const struct device *dev, void *user_data) {
@@ -361,6 +372,11 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
 }
 
 void sbc_tx_work_handler(struct k_work *sbc_tx_work_ptr) {
+  struct com_tx_arg local_item;
+  if(k_mutex_lock(&bs_reader_cnt)==0){
+    return;
+  };
+  k_mutex_lock(&bs_writer_cnt);
   struct com_tx_arg *com_info =
       CONTAINER_OF(sbc_tx_work_ptr, struct com_tx_arg,
                    sbc_tx_work_item); // changed type from som_arg to
@@ -380,6 +396,7 @@ void sbc_tx_work_handler(struct k_work *sbc_tx_work_ptr) {
   for (int i = 0; i < BS_MSG_LEN; i++) {
     uart_poll_out(sbc_uart, bs_tx_buf[i]);
   }
+  k_mutex_unlock(&bs_writer_cnt);
 }
 
 int velocity_callback(const float *velocity_buffer, int buffer_len,
