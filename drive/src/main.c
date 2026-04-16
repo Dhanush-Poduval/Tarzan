@@ -579,6 +579,8 @@ int main() {
   k_work_init(&(arm.channel_work_item), arm_channel_work_handler);
   k_work_init(&(drive.auto_arm_work_item),auto_arm_work_handler);
   k_work_init(&(drive_com.cobs_rx_work_item), cobs_rx_work_handler);
+  k_work_init(&gps_work_item,gps_work_handler);
+  k_work_init(&(arm.arm_tx_work_item),arm_tx_work_handler);
   k_work_init(&(com_tx.sbc_tx_work_item), sbc_tx_work_handler);
 
   /* initializing drive configs */
