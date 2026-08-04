@@ -334,9 +334,9 @@ void sbus_work_handler(struct k_work *sbus_work_ptr) {
 }
 
 /* received cobs message work handler */
-struct dummy_arm_mode {
-  uint8_t arm_dummy[sizeof(struct auto_msg)+2];
-}dummy_arm;
+// struct dummy_arm_mode {
+//   uint8_t arm_dummy[sizeof(struct auto_msg)+2];
+// }dummy_arm;
 void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
   struct com_rx_arg *com_info = CONTAINER_OF(
       cobs_rx_work_ptr, struct com_rx_arg,
@@ -351,19 +351,19 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
     LOG_ERR("COBS Decode Failed %d\n", result.status);
     return;
   }
+  uint8_t *data=(uint8_t *)&autonomous_state;
   if(autonomous_state.state==arm_mode){
-    /* 
-    for(int i=0;i<auto_msg+2;i++){
-        drive.arm_work_buffer[i]=buffer[i];
+     
+    for(int i=0;i<sizeof(auto_msg)+2;i++){
+        drive.arm_work_buffer[i]=data[i];
     }; 
-    */ 
+     
     com_info->work_item=arm_com.work_item;
   }else if(autonomous_state.state==drive_mode){ 
-    /*
-    for(int i=0;i<auto_msg+2;i++){
-      drive.drive_raw_buffer=buffer[i];
-    };*/ 
-     
+    
+    for(int i=0;i<sizeof(auto_msg)+2;i++){
+      drive.drive_raw_buffer=data[i];
+    };  
     com_info->work_item=drive_com.work_item;
   }else {
     printk("Error no valid state found for autonomous \n");
