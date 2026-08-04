@@ -334,13 +334,15 @@ void sbus_work_handler(struct k_work *sbus_work_ptr) {
 }
 
 /* received cobs message work handler */
+struct dummy_arm_mode {
+  uint8_t arm_dummy[sizeof(struct auto_msg)+2];
+}dummy_arm;
 void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
   struct com_rx_arg *com_info = CONTAINER_OF(
       cobs_rx_work_ptr, struct com_rx_arg,
       cobs_rx_work_item); // changed type here to check for conflicts
 
   uint8_t buf[com_info->MSG_LEN];
-
   k_msgq_get(com_info->msgq_rx, buf, K_MSEC(4));
   struct auto_msg autonomous_state; 
   cobs_decode_result result = cobs_decode(
@@ -360,7 +362,7 @@ void cobs_rx_work_handler(struct k_work *cobs_rx_work_ptr) {
     /*
     for(int i=0;i<auto_msg+2;i++){
       drive.drive_raw_buffer=buffer[i];
-    }; */ 
+    };*/ 
      
     com_info->work_item=drive_com.work_item;
   }else {
