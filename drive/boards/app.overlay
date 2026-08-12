@@ -115,8 +115,8 @@
 	};
 
 	chosen {
-		zephyr,console = &usart2;
-		zephyr,shell-uart = &usart2;
+		zephyr,console = &usart3;
+		zephyr,shell-uart = &usart3;
 	};
 };
 
@@ -135,14 +135,14 @@
 };
 
 &usart3{
-	pinctrl-0 = <&usart3_tx_pb10 &usart3_rx_pb11>;
+	pinctrl-0 = <&usart3_tx_pd8 &usart3_rx_pd9>;
 	pinctrl-names = "default";
 	status = "okay";
-	current-speed = <230400>;
+	current-speed = <115200>;
 	gnss: u_blox_m8n {
 		status = "okay";
 		compatible = "u-blox,m8";
-		initial-baudrate = <230400>;
+		initial-baudrate = <115200>;
 	};
 };
 
