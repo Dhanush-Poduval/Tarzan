@@ -72,14 +72,7 @@ struct auto_msg {
   struct joint arm_cmd[6]; 
   uint32_t crc;
 };
-/*struct for storing the target values for ik function */ 
-struct target_pos{
-  float x;
-  float y;
-  float z;
-
-};
-/* msg struct for tx coms */
+/* struct to store gps data */ 
 struct gps_data {
   int64_t latitude;
   int64_t longitude;
@@ -87,6 +80,7 @@ struct gps_data {
   int32_t bearing;
   struct k_work gps_work_item; 
 }gps;
+/* msg struct for tx coms */
 struct base_station_msg {
   struct gps_data data;
   struct joint angles[6];
@@ -103,6 +97,7 @@ K_MSGQ_DEFINE(arm_msgq,sizeof(struct auto_msg)+2,50,1);
 K_MSGQ_DEFINE(arm_tx_msgq,sizeof(struct joint),50,1);
 /* defining the message queue for tx item gps */ 
 K_MSGQ_DEFINE(gps_tx_msgq,sizeof(struct gps_data),50,1);
+/* defining the message queue for the base messgae tx item */ 
 K_MSGQ_DEFINE(base_station_msgq,sizeof(struct base_station_msg),50,1);
 /* workq dedicated thread */
 K_THREAD_STACK_DEFINE(stack_area, STACK_SIZE);
@@ -219,9 +214,8 @@ void gps_cb(const struct device *dev, const struct gnss_data *data) {
     dummy_gps.longitude=data->nav_data.longitude;
     dummy_gps.altitude=data->nav_data.altitude;
     dummy_gps.bearing=data->nav_data.bearing;
-    //k_work_submit_to_queue(&work_q, &(com_tx.sbc_tx_work_item));
+    k_work_submit_to_queue(&work_q, &(dummy_gps.gps_work_item));
     k_msgq_put(&gps_tx_msgq,&dummy_gps,K_NO_WAIT);
-    k_work_submit_to_queue(&work_q,&(dummy_gps.gps_work_item));
   } else
     LOG_ERR("GPS: Unable to fix satellite");
 }
@@ -242,10 +236,10 @@ void angles_cb(const struct device *dev , struct joint angles){
     return;
   if (!uart_irq_rx_ready(sbus_uart))
     return;
-  // for(int i=0;i<6;i++){
-  //     arm_tx[i]=angles[i];
-  //   //k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
-  // };
+  for(int i=0;i<6;i++){
+      arm_tx[i]=angles[i];
+      k_msgq_put(&base_station_msgq,&com_tx,K_NO_WAIT);
+  };
   k_msgq_put(&arm_tx_msgq,&arm_tx,K_NO_WAIT);
   k_work_submit_to_queue(&work_q,&arm_tx->arm_tx_work_item);
 };
